@@ -1,184 +1,296 @@
 """
-Advanced Snake Game - Obstacles + Sound + Persistent High Score 🐍
+Premium Snake Game - Advanced Edition 🐍✨
 
-How to install pygame:
+Install pygame:
     python3.12 -m venv venv
     source venv/bin/activate
     pip install pygame
 
-How to run:
+Run:
     python snake_game.py
 
 Controls:
     Arrow Keys / WASD  - Move
     SPACE              - Pause / Resume
     ENTER              - Start / Restart
-    ESC                - Quit
+    ESC                - Quit / Back
+    M                  - Mute / Unmute
+    + / =              - Volume Up
+    -                  - Volume Down
 
 Features:
-    - Modern UI
-    - Animated food
-    - Snake eyes
+    - Premium neon UI
+    - Persistent high score saved to snake_save.json
+    - Procedural sound effects
+    - Mute / unmute support
+    - Volume control
     - Obstacles
-    - Sound effects
-    - Persistent high score saved to high_score.txt
-    - Score, level, speed scaling
+    - Power-ups
+    - Increasing difficulty
+    - Particle effects
+    - Main menu, pause screen, game-over screen
 """
 
+import json
+import math
 import os
 import random
-import math
 import pygame
 
 
 # ============================================================
-# Game Configuration
+# Basic Configuration
 # ============================================================
 
-WINDOW_WIDTH = 900
-WINDOW_HEIGHT = 650
+WINDOW_WIDTH = 960
+WINDOW_HEIGHT = 680
 
-CELL_SIZE = 25
-GRID_WIDTH = WINDOW_WIDTH // CELL_SIZE
-GRID_HEIGHT = WINDOW_HEIGHT // CELL_SIZE
+CELL_SIZE = 24
+TOP_BAR_HEIGHT = 64
+
+GRID_COLUMNS = WINDOW_WIDTH // CELL_SIZE
+GRID_ROWS = (WINDOW_HEIGHT - TOP_BAR_HEIGHT) // CELL_SIZE
 
 FPS = 60
-START_MOVE_DELAY = 140
-HIGH_SCORE_FILE = "high_score.txt"
+SAVE_FILE = "snake_save.json"
+
+DIFFICULTIES = {
+    "Easy": {
+        "move_delay": 155,
+        "score_multiplier": 1,
+        "start_obstacles": 4,
+        "color": (120, 255, 170),
+    },
+    "Normal": {
+        "move_delay": 125,
+        "score_multiplier": 2,
+        "start_obstacles": 8,
+        "color": (100, 210, 255),
+    },
+    "Hard": {
+        "move_delay": 95,
+        "score_multiplier": 3,
+        "start_obstacles": 12,
+        "color": (255, 120, 120),
+    },
+}
+
+POWER_UP_TYPES = {
+    "shield": {
+        "name": "Shield",
+        "duration": 8_000,
+        "color": (90, 180, 255),
+        "symbol": "S",
+    },
+    "slow": {
+        "name": "Slow Motion",
+        "duration": 7_000,
+        "color": (170, 130, 255),
+        "symbol": "T",
+    },
+    "double": {
+        "name": "Double Score",
+        "duration": 9_000,
+        "color": (255, 210, 80),
+        "symbol": "2X",
+    },
+    "bonus": {
+        "name": "Bonus Points",
+        "duration": 0,
+        "color": (255, 120, 190),
+        "symbol": "+",
+    },
+}
 
 # Colors
-BLACK = (10, 10, 18)
-DARK_BLUE = (12, 18, 35)
-WHITE = (240, 240, 245)
-GRAY = (140, 150, 165)
-LIGHT_GRAY = (190, 200, 215)
+BLACK = (7, 10, 18)
+DARK_NAVY = (9, 15, 31)
+PANEL = (17, 27, 54)
+PANEL_LIGHT = (28, 44, 86)
 
-GREEN = (40, 220, 120)
-DARK_GREEN = (20, 150, 85)
-LIME = (120, 255, 140)
+WHITE = (245, 248, 255)
+MUTED = (150, 163, 190)
+SOFT_MUTED = (95, 110, 145)
 
-RED = (245, 70, 80)
-DARK_RED = (160, 30, 40)
+NEON_GREEN = (85, 255, 150)
+GREEN_DARK = (25, 160, 95)
+NEON_CYAN = (80, 230, 255)
+NEON_BLUE = (95, 150, 255)
+NEON_PURPLE = (180, 115, 255)
+NEON_PINK = (255, 90, 180)
+NEON_RED = (255, 80, 95)
+YELLOW = (255, 220, 90)
+ORANGE = (255, 155, 70)
 
-YELLOW = (255, 220, 80)
-CYAN = (80, 220, 255)
-PURPLE = (170, 100, 255)
-ORANGE = (255, 145, 60)
-
-PANEL_COLOR = (20, 28, 48)
-PANEL_BORDER = (80, 110, 180)
-GRID_COLOR = (35, 45, 70)
-OBSTACLE_COLOR = (110, 115, 135)
-OBSTACLE_BORDER = (180, 185, 205)
+GRID_LINE = (27, 41, 75)
+OBSTACLE = (115, 122, 145)
+OBSTACLE_BORDER = (190, 198, 220)
 
 
 # ============================================================
 # Pygame Setup
 # ============================================================
 
+pygame.mixer.pre_init(44100, -16, 1, 512)
 pygame.init()
-pygame.mixer.init()
 
-pygame.display.set_caption("Advanced Snake Game 🐍")
+try:
+    pygame.mixer.init()
+    SOUND_AVAILABLE = True
+except pygame.error:
+    SOUND_AVAILABLE = False
+
+pygame.display.set_caption("Premium Snake Game 🐍✨")
+
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 clock = pygame.time.Clock()
 
-TITLE_FONT = pygame.font.SysFont("arial", 58, bold=True)
-LARGE_FONT = pygame.font.SysFont("arial", 38, bold=True)
-MEDIUM_FONT = pygame.font.SysFont("arial", 26, bold=True)
-SMALL_FONT = pygame.font.SysFont("arial", 20)
-TINY_FONT = pygame.font.SysFont("arial", 16)
+TITLE_FONT = pygame.font.SysFont("arial", 70, bold=True)
+LARGE_FONT = pygame.font.SysFont("arial", 42, bold=True)
+MEDIUM_FONT = pygame.font.SysFont("arial", 25, bold=True)
+SMALL_FONT = pygame.font.SysFont("arial", 18)
+TINY_FONT = pygame.font.SysFont("arial", 14)
+
+
+# ============================================================
+# Save System
+# ============================================================
+
+def load_save_data():
+    """Load high score and audio settings."""
+    default_data = {
+        "high_score": 0,
+        "muted": False,
+        "volume": 0.45,
+    }
+
+    if not os.path.exists(SAVE_FILE):
+        return default_data
+
+    try:
+        with open(SAVE_FILE, "r", encoding="utf-8") as file:
+            saved_data = json.load(file)
+
+        default_data.update(saved_data)
+        return default_data
+
+    except (json.JSONDecodeError, OSError):
+        return default_data
+
+
+def save_data(high_score, muted, volume):
+    """Save high score and audio settings."""
+    data = {
+        "high_score": high_score,
+        "muted": muted,
+        "volume": volume,
+    }
+
+    with open(SAVE_FILE, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4)
 
 
 # ============================================================
 # Sound System
 # ============================================================
 
-def create_tone(frequency=440, duration=0.12, volume=0.25):
-    """
-    Create a simple beep sound using pygame's array system.
+def create_tone(frequency, duration, volume):
+    """Create a simple generated tone without external audio files."""
+    if not SOUND_AVAILABLE:
+        return None
 
-    This avoids needing external .wav files.
-    Because apparently even a snake game needs audio engineering now.
-    """
     sample_rate = 44100
     sample_count = int(sample_rate * duration)
-
     buffer = bytearray()
 
     for sample_index in range(sample_count):
         time_value = sample_index / sample_rate
-        wave = math.sin(2 * math.pi * frequency * time_value)
-        amplitude = int(wave * 32767 * volume)
 
+        wave = math.sin(2 * math.pi * frequency * time_value)
+        fade = 1 - (sample_index / sample_count)
+
+        amplitude = int(wave * 32767 * volume * fade)
         buffer += amplitude.to_bytes(2, byteorder="little", signed=True)
 
     return pygame.mixer.Sound(buffer=bytes(buffer))
 
 
 class SoundManager:
-    """Handles all game sound effects."""
+    """Handles game sound effects, mute, and volume."""
 
-    def __init__(self):
-        self.eat_sound = create_tone(720, 0.08, 0.25)
-        self.game_over_sound = create_tone(160, 0.35, 0.35)
-        self.pause_sound = create_tone(420, 0.08, 0.18)
-        self.start_sound = create_tone(540, 0.12, 0.22)
+    def __init__(self, muted=False, volume=0.45):
+        self.muted = muted
+        self.volume = volume
 
-    def play_eat(self):
-        self.eat_sound.play()
+        self.sounds = {
+            "click": create_tone(460, 0.06, 0.35),
+            "start": create_tone(620, 0.13, 0.40),
+            "eat": create_tone(760, 0.08, 0.45),
+            "power": create_tone(980, 0.11, 0.45),
+            "level": create_tone(520, 0.20, 0.45),
+            "hit": create_tone(130, 0.35, 0.50),
+            "pause": create_tone(380, 0.08, 0.35),
+        }
 
-    def play_game_over(self):
-        self.game_over_sound.play()
+        self.apply_volume()
 
-    def play_pause(self):
-        self.pause_sound.play()
+    def apply_volume(self):
+        """Apply volume to all generated sounds."""
+        if not SOUND_AVAILABLE:
+            return
 
-    def play_start(self):
-        self.start_sound.play()
+        final_volume = 0 if self.muted else self.volume
+
+        for sound in self.sounds.values():
+            if sound:
+                sound.set_volume(final_volume)
+
+    def play(self, sound_name):
+        """Play a sound effect."""
+        if self.muted or not SOUND_AVAILABLE:
+            return
+
+        sound = self.sounds.get(sound_name)
+
+        if sound:
+            sound.play()
+
+    def toggle_mute(self):
+        """Mute or unmute game audio."""
+        self.muted = not self.muted
+        self.apply_volume()
+
+    def volume_up(self):
+        """Increase volume."""
+        self.volume = min(1.0, self.volume + 0.1)
+        self.apply_volume()
+
+    def volume_down(self):
+        """Decrease volume."""
+        self.volume = max(0.0, self.volume - 0.1)
+        self.apply_volume()
 
 
 # ============================================================
-# High Score System
-# ============================================================
-
-def load_high_score():
-    """Load high score from file."""
-    if not os.path.exists(HIGH_SCORE_FILE):
-        return 0
-
-    try:
-        with open(HIGH_SCORE_FILE, "r", encoding="utf-8") as file:
-            return int(file.read().strip())
-    except ValueError:
-        return 0
-
-
-def save_high_score(score):
-    """Save high score to file."""
-    with open(HIGH_SCORE_FILE, "w", encoding="utf-8") as file:
-        file.write(str(score))
-
-
-# ============================================================
-# Helper Functions
+# Drawing Helpers
 # ============================================================
 
 def draw_text(surface, text, font, color, x, y, center=True):
-    """Draw text on the screen."""
-    text_surface = font.render(text, True, color)
-    text_rect = text_surface.get_rect()
+    """Draw text."""
+    rendered = font.render(text, True, color)
+    rect = rendered.get_rect()
 
     if center:
-        text_rect.center = (x, y)
+        rect.center = (x, y)
     else:
-        text_rect.topleft = (x, y)
+        rect.topleft = (x, y)
 
-    surface.blit(text_surface, text_rect)
+    surface.blit(rendered, rect)
+    return rect
 
 
-def draw_rounded_rect(surface, color, rect, radius=15, border_color=None, border_width=2):
-    """Draw a rounded rectangle with optional border."""
+def draw_rounded_rect(surface, color, rect, radius=20, border_color=None, border_width=2):
+    """Draw rounded rectangle."""
     pygame.draw.rect(surface, color, rect, border_radius=radius)
 
     if border_color:
@@ -186,354 +298,675 @@ def draw_rounded_rect(surface, color, rect, radius=15, border_color=None, border
                          border_width, border_radius=radius)
 
 
-def draw_gradient_background(surface):
-    """Draw a vertical gradient background."""
+def draw_vertical_gradient(surface, top_color, bottom_color):
+    """Draw vertical gradient."""
     for y in range(WINDOW_HEIGHT):
         ratio = y / WINDOW_HEIGHT
 
-        red = int(DARK_BLUE[0] * (1 - ratio) + BLACK[0] * ratio)
-        green = int(DARK_BLUE[1] * (1 - ratio) + BLACK[1] * ratio)
-        blue = int(DARK_BLUE[2] * (1 - ratio) + BLACK[2] * ratio)
+        red = int(top_color[0] * (1 - ratio) + bottom_color[0] * ratio)
+        green = int(top_color[1] * (1 - ratio) + bottom_color[1] * ratio)
+        blue = int(top_color[2] * (1 - ratio) + bottom_color[2] * ratio)
 
         pygame.draw.line(surface, (red, green, blue),
                          (0, y), (WINDOW_WIDTH, y))
 
 
-def draw_grid(surface):
-    """Draw a subtle grid background."""
+def draw_grid(surface, offset=0):
+    """Draw animated grid."""
     for x in range(0, WINDOW_WIDTH, CELL_SIZE):
-        pygame.draw.line(surface, GRID_COLOR, (x, 0), (x, WINDOW_HEIGHT), 1)
+        pygame.draw.line(surface, GRID_LINE,
+                         (x, TOP_BAR_HEIGHT), (x, WINDOW_HEIGHT), 1)
 
-    for y in range(0, WINDOW_HEIGHT, CELL_SIZE):
-        pygame.draw.line(surface, GRID_COLOR, (0, y), (WINDOW_WIDTH, y), 1)
+    for row in range(GRID_ROWS + 1):
+        y = TOP_BAR_HEIGHT + row * CELL_SIZE
+        pygame.draw.line(surface, GRID_LINE, (0, y), (WINDOW_WIDTH, y), 1)
 
-
-def cell_to_pixel(position):
-    """Convert grid coordinates to pixel coordinates."""
-    x, y = position
-    return x * CELL_SIZE, y * CELL_SIZE
-
-
-def create_button(surface, text, x, y, width, height):
-    """Draw a button-like UI element."""
-    mouse_x, mouse_y = pygame.mouse.get_pos()
-    rect = pygame.Rect(x, y, width, height)
-    is_hovered = rect.collidepoint(mouse_x, mouse_y)
-
-    if is_hovered:
-        button_color = (45, 65, 110)
-        border_color = CYAN
-    else:
-        button_color = PANEL_COLOR
-        border_color = PANEL_BORDER
-
-    draw_rounded_rect(surface, button_color, rect, 14, border_color, 2)
-    draw_text(surface, text, MEDIUM_FONT, WHITE,
-              x + width // 2, y + height // 2)
-
-    return rect
+    scanline_y = TOP_BAR_HEIGHT + \
+        int(offset) % (WINDOW_HEIGHT - TOP_BAR_HEIGHT)
+    pygame.draw.line(surface, (35, 65, 110), (0, scanline_y),
+                     (WINDOW_WIDTH, scanline_y), 2)
 
 
-# ============================================================
-# Food Class
-# ============================================================
+def grid_to_pixel(position):
+    """Convert grid position to pixel position."""
+    column, row = position
+    return column * CELL_SIZE, TOP_BAR_HEIGHT + row * CELL_SIZE
 
-class Food:
-    """Handles food spawning, animation, and drawing."""
 
-    def __init__(self, snake_body, obstacles):
-        self.position = self.spawn(snake_body, obstacles)
-        self.animation_timer = 0
+def clamp(value, minimum, maximum):
+    """Clamp value between minimum and maximum."""
+    return max(minimum, min(value, maximum))
 
-    def spawn(self, snake_body, obstacles):
-        """Spawn food in a random empty grid cell."""
-        while True:
-            position = (
-                random.randint(1, GRID_WIDTH - 2),
-                random.randint(2, GRID_HEIGHT - 2)
-            )
 
-            if position not in snake_body and position not in obstacles:
-                return position
+def draw_glow_circle(surface, x, y, radius, color, alpha=70):
+    """Draw fake glow circle."""
+    glow_surface = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
 
-    def respawn(self, snake_body, obstacles):
-        """Move food to a new valid location."""
-        self.position = self.spawn(snake_body, obstacles)
+    pygame.draw.circle(
+        glow_surface,
+        (*color, alpha),
+        (radius * 2, radius * 2),
+        radius * 2
+    )
 
-    def draw(self, surface):
-        """Draw animated food."""
-        self.animation_timer += 0.12
+    surface.blit(glow_surface, (x - radius * 2, y - radius * 2))
 
-        x, y = cell_to_pixel(self.position)
 
-        pulse = abs(math.sin(self.animation_timer))
-        size_offset = int(pulse * 5)
-
-        food_rect = pygame.Rect(
-            x + 4 - size_offset // 2,
-            y + 4 - size_offset // 2,
-            CELL_SIZE - 8 + size_offset,
-            CELL_SIZE - 8 + size_offset
+def draw_glow_rect(surface, rect, color, radius=14):
+    """Draw fake glow rectangle."""
+    for size in range(4, 0, -1):
+        glow_surface = pygame.Surface(
+            (rect.width + size * 10, rect.height + size * 10),
+            pygame.SRCALPHA
         )
 
-        glow_rect = pygame.Rect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2)
+        glow_rect = glow_surface.get_rect()
+        glow_rect.center = (
+            glow_surface.get_width() // 2,
+            glow_surface.get_height() // 2
+        )
 
-        pygame.draw.rect(surface, DARK_RED, glow_rect, border_radius=8)
-        pygame.draw.rect(surface, RED, food_rect, border_radius=8)
-        pygame.draw.circle(surface, WHITE, (x + 10, y + 9), 3)
+        pygame.draw.rect(
+            glow_surface,
+            (*color, 30),
+            glow_rect,
+            border_radius=radius + size * 4
+        )
+
+        surface.blit(glow_surface, (rect.x - size * 5, rect.y - size * 5))
+
+    pygame.draw.rect(surface, color, rect, border_radius=radius)
 
 
 # ============================================================
-# Obstacle Manager
+# UI Button
 # ============================================================
 
-class ObstacleManager:
-    """Creates, stores, and draws obstacles."""
+class Button:
+    """Clickable UI button."""
 
-    def __init__(self):
-        self.obstacles = []
+    def __init__(self, text, x, y, width, height, accent_color):
+        self.text = text
+        self.rect = pygame.Rect(x, y, width, height)
+        self.accent_color = accent_color
 
-    def generate(self, snake_body, amount):
-        """Generate obstacles without overlapping snake."""
-        self.obstacles = []
+    def draw(self, surface, selected=False):
+        """Draw button."""
+        mouse_position = pygame.mouse.get_pos()
+        hovered = self.rect.collidepoint(mouse_position)
 
-        while len(self.obstacles) < amount:
-            position = (
-                random.randint(1, GRID_WIDTH - 2),
-                random.randint(3, GRID_HEIGHT - 2)
-            )
+        fill = PANEL_LIGHT if hovered else PANEL
+        border = self.accent_color if hovered or selected else SOFT_MUTED
+        text_color = WHITE if hovered or selected else MUTED
 
-            too_close_to_snake_head = self.is_too_close(
-                position, snake_body[0], min_distance=5)
+        shadow = self.rect.copy()
+        shadow.y += 6
+        pygame.draw.rect(surface, (3, 5, 12), shadow, border_radius=18)
 
-            if (
-                position not in snake_body
-                and position not in self.obstacles
-                and not too_close_to_snake_head
-            ):
-                self.obstacles.append(position)
+        draw_rounded_rect(surface, fill, self.rect, 18, border, 2)
+        draw_text(surface, self.text, MEDIUM_FONT, text_color,
+                  self.rect.centerx, self.rect.centery)
 
-    def is_too_close(self, position_1, position_2, min_distance):
-        """Avoid spawning obstacles too close to the snake head."""
-        x1, y1 = position_1
-        x2, y2 = position_2
+    def clicked(self, event):
+        """Check click."""
+        return (
+            event.type == pygame.MOUSEBUTTONDOWN
+            and event.button == 1
+            and self.rect.collidepoint(event.pos)
+        )
 
-        distance = abs(x1 - x2) + abs(y1 - y2)
-        return distance < min_distance
 
-    def add_more_obstacles(self, snake_body, food_position, amount):
-        """Add extra obstacles as the level increases."""
-        added = 0
+# ============================================================
+# Particle System
+# ============================================================
 
-        while added < amount:
-            position = (
-                random.randint(1, GRID_WIDTH - 2),
-                random.randint(3, GRID_HEIGHT - 2)
-            )
+class Particle:
+    """Visual particle."""
 
-            if (
-                position not in snake_body
-                and position not in self.obstacles
-                and position != food_position
-            ):
-                self.obstacles.append(position)
-                added += 1
+    def __init__(self, x, y, color):
+        self.x = float(x)
+        self.y = float(y)
+        self.color = color
+        self.radius = random.randint(3, 7)
+        self.life = random.randint(25, 45)
+
+        angle = random.uniform(0, math.tau)
+        speed = random.uniform(1.5, 4.5)
+
+        self.vx = math.cos(angle) * speed
+        self.vy = math.sin(angle) * speed
+
+    def update(self):
+        """Update particle."""
+        self.x += self.vx
+        self.y += self.vy
+
+        self.vx *= 0.94
+        self.vy *= 0.94
+
+        self.life -= 1
+        self.radius = max(0, self.radius - 0.08)
 
     def draw(self, surface):
-        """Draw obstacles with a metallic block style."""
-        for obstacle in self.obstacles:
-            x, y = cell_to_pixel(obstacle)
+        """Draw particle."""
+        if self.life <= 0:
+            return
 
-            rect = pygame.Rect(x + 3, y + 3, CELL_SIZE - 6, CELL_SIZE - 6)
-            shine = pygame.Rect(x + 7, y + 7, CELL_SIZE - 14, 5)
+        alpha = clamp(self.life * 6, 0, 255)
+        particle_surface = pygame.Surface((30, 30), pygame.SRCALPHA)
 
-            pygame.draw.rect(surface, OBSTACLE_COLOR, rect, border_radius=6)
-            pygame.draw.rect(surface, OBSTACLE_BORDER,
-                             rect, 2, border_radius=6)
-            pygame.draw.rect(surface, LIGHT_GRAY, shine, border_radius=4)
+        pygame.draw.circle(
+            particle_surface,
+            (*self.color, alpha),
+            (15, 15),
+            int(self.radius)
+        )
+
+        surface.blit(particle_surface, (self.x - 15, self.y - 15))
+
+
+class ParticleSystem:
+    """Manages particles."""
+
+    def __init__(self):
+        self.particles = []
+
+    def burst(self, x, y, color, amount=24):
+        """Create particles."""
+        for _ in range(amount):
+            self.particles.append(Particle(x, y, color))
+
+    def update(self):
+        """Update particles."""
+        for particle in self.particles:
+            particle.update()
+
+        self.particles = [
+            particle for particle in self.particles
+            if particle.life > 0
+        ]
+
+    def draw(self, surface):
+        """Draw particles."""
+        for particle in self.particles:
+            particle.draw(surface)
 
 
 # ============================================================
-# Snake Class
+# Snake
 # ============================================================
 
 class Snake:
-    """Snake movement, drawing, growth, and collision logic."""
+    """Snake movement and rendering."""
 
     def __init__(self):
-        start_x = GRID_WIDTH // 2
-        start_y = GRID_HEIGHT // 2
+        start_column = GRID_COLUMNS // 2
+        start_row = GRID_ROWS // 2
 
         self.body = [
-            (start_x, start_y),
-            (start_x - 1, start_y),
-            (start_x - 2, start_y)
+            (start_column, start_row),
+            (start_column - 1, start_row),
+            (start_column - 2, start_row),
         ]
 
         self.direction = (1, 0)
         self.next_direction = (1, 0)
-        self.should_grow = False
+        self.grow_next = False
 
-    def set_direction(self, new_direction):
-        """Set direction while preventing instant reverse movement."""
+    def set_direction(self, direction):
+        """Change direction without instant reverse."""
         current_x, current_y = self.direction
-        new_x, new_y = new_direction
+        new_x, new_y = direction
 
-        if (current_x + new_x, current_y + new_y) != (0, 0):
-            self.next_direction = new_direction
+        if current_x + new_x == 0 and current_y + new_y == 0:
+            return
+
+        self.next_direction = direction
 
     def move(self):
-        """Move snake by one grid cell."""
+        """Move snake."""
         self.direction = self.next_direction
 
-        head_x, head_y = self.body[0]
-        move_x, move_y = self.direction
+        head_column, head_row = self.body[0]
+        direction_column, direction_row = self.direction
 
-        new_head = (head_x + move_x, head_y + move_y)
+        new_head = (
+            head_column + direction_column,
+            head_row + direction_row
+        )
 
         self.body.insert(0, new_head)
 
-        if self.should_grow:
-            self.should_grow = False
+        if self.grow_next:
+            self.grow_next = False
         else:
             self.body.pop()
 
     def grow(self):
-        """Grow snake on the next move."""
-        self.should_grow = True
+        """Grow snake."""
+        self.grow_next = True
 
-    def hits_wall(self):
+    def hit_wall(self):
         """Check wall collision."""
-        head_x, head_y = self.body[0]
+        head_column, head_row = self.body[0]
 
         return (
-            head_x < 0
-            or head_x >= GRID_WIDTH
-            or head_y < 1
-            or head_y >= GRID_HEIGHT
+            head_column < 0
+            or head_column >= GRID_COLUMNS
+            or head_row < 0
+            or head_row >= GRID_ROWS
         )
 
-    def hits_self(self):
+    def hit_self(self):
         """Check self collision."""
         return self.body[0] in self.body[1:]
 
-    def hits_obstacle(self, obstacles):
-        """Check obstacle collision."""
-        return self.body[0] in obstacles
-
-    def draw(self, surface):
-        """Draw the snake."""
+    def draw(self, surface, shield_active=False):
+        """Draw snake."""
         for index, segment in enumerate(self.body):
-            x, y = cell_to_pixel(segment)
-            rect = pygame.Rect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4)
+            x, y = grid_to_pixel(segment)
+
+            shrink = min(index, 8)
+            rect = pygame.Rect(
+                x + 3 + shrink // 3,
+                y + 3 + shrink // 3,
+                CELL_SIZE - 6 - shrink // 2,
+                CELL_SIZE - 6 - shrink // 2
+            )
 
             if index == 0:
-                color = LIME
-                border_color = WHITE
+                head_color = NEON_BLUE if shield_active else NEON_GREEN
+                draw_glow_rect(surface, rect, head_color, radius=10)
+                pygame.draw.rect(surface, WHITE, rect, 2, border_radius=10)
             else:
-                color = GREEN if index % 2 == 0 else DARK_GREEN
-                border_color = None
-
-            pygame.draw.rect(surface, color, rect, border_radius=8)
-
-            if border_color:
-                pygame.draw.rect(surface, border_color,
-                                 rect, 2, border_radius=8)
+                ratio = index / max(1, len(self.body))
+                green_value = int(255 - ratio * 100)
+                color = (40, green_value, 120)
+                pygame.draw.rect(surface, color, rect, border_radius=9)
 
         self.draw_eyes(surface)
 
     def draw_eyes(self, surface):
-        """Draw snake eyes based on direction."""
-        head_x, head_y = cell_to_pixel(self.body[0])
+        """Draw snake eyes."""
+        head_x, head_y = grid_to_pixel(self.body[0])
         direction_x, direction_y = self.direction
 
         center_x = head_x + CELL_SIZE // 2
         center_y = head_y + CELL_SIZE // 2
 
         if direction_x == 1:
-            eye_1 = (center_x + 5, center_y - 5)
-            eye_2 = (center_x + 5, center_y + 5)
+            eyes = [(center_x + 5, center_y - 5), (center_x + 5, center_y + 5)]
         elif direction_x == -1:
-            eye_1 = (center_x - 5, center_y - 5)
-            eye_2 = (center_x - 5, center_y + 5)
+            eyes = [(center_x - 5, center_y - 5), (center_x - 5, center_y + 5)]
         elif direction_y == -1:
-            eye_1 = (center_x - 5, center_y - 5)
-            eye_2 = (center_x + 5, center_y - 5)
+            eyes = [(center_x - 5, center_y - 5), (center_x + 5, center_y - 5)]
         else:
-            eye_1 = (center_x - 5, center_y + 5)
-            eye_2 = (center_x + 5, center_y + 5)
+            eyes = [(center_x - 5, center_y + 5), (center_x + 5, center_y + 5)]
 
-        pygame.draw.circle(surface, BLACK, eye_1, 3)
-        pygame.draw.circle(surface, BLACK, eye_2, 3)
+        for eye in eyes:
+            pygame.draw.circle(surface, BLACK, eye, 4)
+            pygame.draw.circle(surface, WHITE, (eye[0] - 1, eye[1] - 1), 1)
 
 
 # ============================================================
-# Game Class
+# Food
 # ============================================================
 
-class SnakeGame:
+class Food:
+    """Food object."""
+
+    def __init__(self, blocked_cells):
+        self.position = self.spawn(blocked_cells)
+        self.timer = random.uniform(0, 10)
+
+    def spawn(self, blocked_cells):
+        """Spawn food away from blocked cells."""
+        while True:
+            position = (
+                random.randint(1, GRID_COLUMNS - 2),
+                random.randint(1, GRID_ROWS - 2)
+            )
+
+            if position not in blocked_cells:
+                return position
+
+    def respawn(self, blocked_cells):
+        """Respawn food."""
+        self.position = self.spawn(blocked_cells)
+
+    def draw(self, surface):
+        """Draw animated food."""
+        self.timer += 0.08
+
+        x, y = grid_to_pixel(self.position)
+        center_x = x + CELL_SIZE // 2
+        center_y = y + CELL_SIZE // 2
+
+        floating = math.sin(self.timer) * 3
+        pulse = (math.sin(self.timer * 2) + 1) / 2
+
+        draw_glow_circle(surface, center_x, int(
+            center_y + floating), int(12 + pulse * 5), NEON_RED, 55)
+
+        pygame.draw.circle(
+            surface,
+            NEON_RED,
+            (center_x, int(center_y + floating)),
+            int(8 + pulse * 2)
+        )
+
+        pygame.draw.circle(
+            surface,
+            WHITE,
+            (center_x - 3, int(center_y - 3 + floating)),
+            3
+        )
+
+
+# ============================================================
+# Obstacles
+# ============================================================
+
+class ObstacleManager:
+    """Creates and draws obstacles."""
+
+    def __init__(self):
+        self.obstacles = []
+
+    def generate(self, snake_body, amount):
+        """Generate obstacles."""
+        self.obstacles = []
+
+        while len(self.obstacles) < amount:
+            position = self.random_position()
+
+            if self.is_valid_position(position, snake_body, None):
+                self.obstacles.append(position)
+
+    def random_position(self):
+        """Return random grid position."""
+        return (
+            random.randint(1, GRID_COLUMNS - 2),
+            random.randint(1, GRID_ROWS - 2)
+        )
+
+    def is_valid_position(self, position, snake_body, food_position):
+        """Check whether obstacle position is safe."""
+        snake_head = snake_body[0]
+        distance = abs(position[0] - snake_head[0]) + \
+            abs(position[1] - snake_head[1])
+
+        return (
+            position not in snake_body
+            and position not in self.obstacles
+            and position != food_position
+            and distance > 6
+        )
+
+    def add_obstacles(self, snake_body, food_position, amount):
+        """Add more obstacles as level increases."""
+        added = 0
+        tries = 0
+
+        while added < amount and tries < 500:
+            tries += 1
+            position = self.random_position()
+
+            if self.is_valid_position(position, snake_body, food_position):
+                self.obstacles.append(position)
+                added += 1
+
+    def remove_obstacle(self, position):
+        """Remove one obstacle."""
+        if position in self.obstacles:
+            self.obstacles.remove(position)
+
+    def draw(self, surface):
+        """Draw obstacles."""
+        for obstacle in self.obstacles:
+            x, y = grid_to_pixel(obstacle)
+
+            rect = pygame.Rect(x + 3, y + 3, CELL_SIZE - 6, CELL_SIZE - 6)
+            shine = pygame.Rect(x + 7, y + 7, CELL_SIZE - 14, 5)
+
+            pygame.draw.rect(surface, OBSTACLE, rect, border_radius=7)
+            pygame.draw.rect(surface, OBSTACLE_BORDER,
+                             rect, 2, border_radius=7)
+            pygame.draw.rect(surface, WHITE, shine, border_radius=4)
+
+
+# ============================================================
+# Power-Up
+# ============================================================
+
+class PowerUp:
+    """Power-up object."""
+
+    def __init__(self, blocked_cells):
+        self.kind = random.choice(list(POWER_UP_TYPES.keys()))
+        self.position = self.spawn(blocked_cells)
+        self.spawn_time = pygame.time.get_ticks()
+        self.life_time = 10_000
+        self.timer = random.uniform(0, 10)
+
+    def spawn(self, blocked_cells):
+        """Spawn power-up away from blocked cells."""
+        while True:
+            position = (
+                random.randint(1, GRID_COLUMNS - 2),
+                random.randint(1, GRID_ROWS - 2)
+            )
+
+            if position not in blocked_cells:
+                return position
+
+    def expired(self):
+        """Check whether power-up expired."""
+        return pygame.time.get_ticks() - self.spawn_time > self.life_time
+
+    def draw(self, surface):
+        """Draw power-up."""
+        self.timer += 0.1
+
+        config = POWER_UP_TYPES[self.kind]
+        color = config["color"]
+        symbol = config["symbol"]
+
+        x, y = grid_to_pixel(self.position)
+        center_x = x + CELL_SIZE // 2
+        center_y = y + CELL_SIZE // 2
+
+        floating = math.sin(self.timer) * 4
+        radius = int(10 + math.sin(self.timer * 2) * 2)
+
+        draw_glow_circle(surface, center_x, int(
+            center_y + floating), 15, color, 60)
+
+        pygame.draw.circle(
+            surface, color, (center_x, int(center_y + floating)), radius)
+        pygame.draw.circle(
+            surface, WHITE, (center_x, int(center_y + floating)), radius, 2)
+
+        draw_text(
+            surface,
+            symbol,
+            TINY_FONT,
+            BLACK,
+            center_x,
+            int(center_y + floating)
+        )
+
+
+# ============================================================
+# Main Game
+# ============================================================
+
+class PremiumSnakeGame:
     """Main game controller."""
 
     def __init__(self):
-        self.sound_manager = SoundManager()
-        self.high_score = load_high_score()
-        self.reset()
+        save = load_save_data()
 
-    def reset(self):
-        """Reset game objects and state."""
+        self.high_score = save["high_score"]
+        self.selected_difficulty = "Normal"
+
+        self.sound_manager = SoundManager(
+            muted=save["muted"],
+            volume=save["volume"]
+        )
+
+        self.menu_timer = 0
+        self.transition_alpha = 0
+
+        self.start_button = Button(
+            "START GAME",
+            WINDOW_WIDTH // 2 - 155,
+            360,
+            310,
+            58,
+            NEON_GREEN
+        )
+
+        self.easy_button = Button(
+            "EASY",
+            WINDOW_WIDTH // 2 - 260,
+            450,
+            150,
+            52,
+            DIFFICULTIES["Easy"]["color"]
+        )
+
+        self.normal_button = Button(
+            "NORMAL",
+            WINDOW_WIDTH // 2 - 75,
+            450,
+            150,
+            52,
+            DIFFICULTIES["Normal"]["color"]
+        )
+
+        self.hard_button = Button(
+            "HARD",
+            WINDOW_WIDTH // 2 + 110,
+            450,
+            150,
+            52,
+            DIFFICULTIES["Hard"]["color"]
+        )
+
+        self.mute_button = Button(
+            "MUTE",
+            WINDOW_WIDTH - 145,
+            14,
+            120,
+            38,
+            NEON_CYAN
+        )
+
+        self.reset_game_objects()
+        self.state = "menu"
+
+    def reset_game_objects(self):
+        """Reset game objects."""
         self.snake = Snake()
+        self.particles = ParticleSystem()
+
+        # IMPORTANT:
+        # Create power_up before calling get_blocked_cells().
+        # Otherwise get_blocked_cells() tries to read self.power_up
+        # before it exists, and Python throws an AttributeError.
+        self.power_up = None
+
+        difficulty = DIFFICULTIES[self.selected_difficulty]
 
         self.obstacle_manager = ObstacleManager()
-        self.obstacle_manager.generate(self.snake.body, amount=8)
+        self.obstacle_manager.generate(
+            self.snake.body,
+            difficulty["start_obstacles"]
+        )
 
-        self.food = Food(self.snake.body, self.obstacle_manager.obstacles)
+        blocked_cells = self.get_blocked_cells()
+        self.food = Food(blocked_cells)
+
+        self.next_power_spawn_time = pygame.time.get_ticks() + random.randint(6_000, 10_000)
 
         self.score = 0
         self.level = 1
-        self.move_delay = START_MOVE_DELAY
+        self.previous_level = 1
+
+        self.active_effects = {
+            "shield": 0,
+            "slow": 0,
+            "double": 0,
+        }
+
+        self.move_delay = difficulty["move_delay"]
         self.last_move_time = pygame.time.get_ticks()
 
-        self.state = "menu"
-        self.previous_level = 1
+    def get_blocked_cells(self):
+        """Return cells occupied by snake, obstacles, and food if available."""
+        blocked = set(self.snake.body)
+        blocked.update(self.obstacle_manager.obstacles)
+
+        if hasattr(self, "food"):
+            blocked.add(self.food.position)
+
+        if self.power_up:
+            blocked.add(self.power_up.position)
+
+        return blocked
 
     def start_game(self):
-        """Start a new game."""
-        self.snake = Snake()
-
-        self.obstacle_manager = ObstacleManager()
-        self.obstacle_manager.generate(self.snake.body, amount=8)
-
-        self.food = Food(self.snake.body, self.obstacle_manager.obstacles)
-
-        self.score = 0
-        self.level = 1
-        self.previous_level = 1
-        self.move_delay = START_MOVE_DELAY
-        self.last_move_time = pygame.time.get_ticks()
-
+        """Start new game."""
+        self.reset_game_objects()
         self.state = "playing"
-        self.sound_manager.play_start()
+        self.transition_alpha = 180
+        self.sound_manager.play("start")
 
-    def trigger_game_over(self):
-        """Handle game over logic."""
-        self.state = "game_over"
-        self.sound_manager.play_game_over()
+    def save_current_settings(self):
+        """Save high score and audio settings."""
+        save_data(
+            self.high_score,
+            self.sound_manager.muted,
+            self.sound_manager.volume
+        )
 
-        if self.score > self.high_score:
-            self.high_score = self.score
-            save_high_score(self.high_score)
+    def toggle_mute(self):
+        """Toggle mute."""
+        self.sound_manager.toggle_mute()
+        self.save_current_settings()
 
     def handle_events(self):
-        """Handle keyboard input and window close."""
+        """Handle user input."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                self.save_current_settings()
                 return False
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    return False
+                if event.key == pygame.K_m:
+                    self.toggle_mute()
 
-                if self.state == "menu":
+                elif event.key in (pygame.K_EQUALS, pygame.K_PLUS):
+                    self.sound_manager.volume_up()
+                    self.save_current_settings()
+
+                elif event.key == pygame.K_MINUS:
+                    self.sound_manager.volume_down()
+                    self.save_current_settings()
+
+                elif event.key == pygame.K_ESCAPE:
+                    if self.state == "playing":
+                        self.state = "paused"
+                        self.sound_manager.play("pause")
+                    elif self.state == "paused":
+                        self.state = "playing"
+                        self.sound_manager.play("pause")
+                    else:
+                        self.save_current_settings()
+                        return False
+
+                elif self.state == "menu":
                     if event.key == pygame.K_RETURN:
                         self.start_game()
 
@@ -548,162 +981,424 @@ class SnakeGame:
                         self.snake.set_direction((1, 0))
                     elif event.key == pygame.K_SPACE:
                         self.state = "paused"
-                        self.sound_manager.play_pause()
+                        self.sound_manager.play("pause")
 
                 elif self.state == "paused":
                     if event.key == pygame.K_SPACE:
                         self.state = "playing"
-                        self.sound_manager.play_pause()
+                        self.sound_manager.play("pause")
 
                 elif self.state == "game_over":
                     if event.key == pygame.K_RETURN:
                         self.start_game()
 
+            if self.mute_button.clicked(event):
+                self.toggle_mute()
+
+            if self.state == "menu":
+                if self.start_button.clicked(event):
+                    self.start_game()
+
+                elif self.easy_button.clicked(event):
+                    self.selected_difficulty = "Easy"
+                    self.sound_manager.play("click")
+
+                elif self.normal_button.clicked(event):
+                    self.selected_difficulty = "Normal"
+                    self.sound_manager.play("click")
+
+                elif self.hard_button.clicked(event):
+                    self.selected_difficulty = "Hard"
+                    self.sound_manager.play("click")
+
+            elif self.state == "game_over":
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    self.start_game()
+
         return True
 
+    def effect_active(self, effect_name):
+        """Check active power-up effect."""
+        return pygame.time.get_ticks() < self.active_effects[effect_name]
+
+    def update_difficulty(self):
+        """Make the game harder as level increases."""
+        difficulty = DIFFICULTIES[self.selected_difficulty]
+        base_delay = difficulty["move_delay"]
+
+        delay_reduction = (self.level - 1) * 7
+
+        if self.effect_active("slow"):
+            self.move_delay = max(75, base_delay - delay_reduction + 45)
+        else:
+            self.move_delay = max(42, base_delay - delay_reduction)
+
+        if self.level > self.previous_level:
+            obstacles_to_add = 2
+
+            if self.level >= 5:
+                obstacles_to_add = 3
+
+            if self.level >= 10:
+                obstacles_to_add = 4
+
+            self.obstacle_manager.add_obstacles(
+                self.snake.body,
+                self.food.position,
+                obstacles_to_add
+            )
+
+            self.previous_level = self.level
+            self.sound_manager.play("level")
+
+    def maybe_spawn_power_up(self):
+        """Spawn power-up sometimes."""
+        current_time = pygame.time.get_ticks()
+
+        if self.power_up and self.power_up.expired():
+            self.power_up = None
+            self.next_power_spawn_time = current_time + \
+                random.randint(6_000, 11_000)
+
+        if self.power_up is None and current_time >= self.next_power_spawn_time:
+            blocked = self.get_blocked_cells()
+            self.power_up = PowerUp(blocked)
+
+    def apply_power_up(self, kind):
+        """Apply collected power-up."""
+        current_time = pygame.time.get_ticks()
+        config = POWER_UP_TYPES[kind]
+
+        if kind == "bonus":
+            self.score += 50
+            self.particles.burst(
+                *self.get_cell_center(self.snake.body[0]),
+                config["color"],
+                amount=36
+            )
+        else:
+            self.active_effects[kind] = current_time + config["duration"]
+
+        self.sound_manager.play("power")
+
+    def get_cell_center(self, position):
+        """Get pixel center of a grid cell."""
+        x, y = grid_to_pixel(position)
+        return x + CELL_SIZE // 2, y + CELL_SIZE // 2
+
+    def handle_collision(self):
+        """Handle collisions."""
+        head = self.snake.body[0]
+
+        hit_wall = self.snake.hit_wall()
+        hit_self = self.snake.hit_self()
+        hit_obstacle = head in self.obstacle_manager.obstacles
+
+        if hit_obstacle and self.effect_active("shield"):
+            self.obstacle_manager.remove_obstacle(head)
+            self.particles.burst(
+                *self.get_cell_center(head),
+                POWER_UP_TYPES["shield"]["color"],
+                amount=34
+            )
+            self.sound_manager.play("power")
+            return False
+
+        if hit_wall or hit_self or hit_obstacle:
+            self.state = "game_over"
+            self.sound_manager.play("hit")
+
+            if self.score > self.high_score:
+                self.high_score = self.score
+                self.save_current_settings()
+
+            return True
+
+        return False
+
     def update(self):
-        """Update game state."""
+        """Update game."""
+        self.menu_timer += 0.025
+
+        if self.transition_alpha > 0:
+            self.transition_alpha -= 8
+
+        self.particles.update()
+
         if self.state != "playing":
             return
 
+        self.maybe_spawn_power_up()
+        self.update_difficulty()
+
         current_time = pygame.time.get_ticks()
 
-        if current_time - self.last_move_time >= self.move_delay:
-            self.snake.move()
-            self.last_move_time = current_time
+        if current_time - self.last_move_time < self.move_delay:
+            return
 
-            if (
-                self.snake.hits_wall()
-                or self.snake.hits_self()
-                or self.snake.hits_obstacle(self.obstacle_manager.obstacles)
-            ):
-                self.trigger_game_over()
-                return
+        self.snake.move()
+        self.last_move_time = current_time
 
-            if self.snake.body[0] == self.food.position:
-                self.score += 10
-                self.snake.grow()
-                self.sound_manager.play_eat()
+        if self.handle_collision():
+            return
 
-                self.food.respawn(
-                    self.snake.body, self.obstacle_manager.obstacles)
+        head = self.snake.body[0]
 
-                self.level = self.score // 50 + 1
-                self.move_delay = max(
-                    55, START_MOVE_DELAY - (self.level - 1) * 10)
+        if head == self.food.position:
+            multiplier = DIFFICULTIES[self.selected_difficulty]["score_multiplier"]
 
-                if self.level > self.previous_level:
-                    self.obstacle_manager.add_more_obstacles(
-                        self.snake.body,
-                        self.food.position,
-                        amount=2
-                    )
-                    self.previous_level = self.level
+            if self.effect_active("double"):
+                multiplier *= 2
 
-    def draw_top_bar(self):
-        """Draw the top score/status bar."""
-        top_bar = pygame.Rect(0, 0, WINDOW_WIDTH, CELL_SIZE)
+            self.score += 10 * multiplier
+            self.level = self.score // 90 + 1
 
-        pygame.draw.rect(screen, PANEL_COLOR, top_bar)
-        pygame.draw.line(screen, PANEL_BORDER, (0, CELL_SIZE),
-                         (WINDOW_WIDTH, CELL_SIZE), 2)
+            self.snake.grow()
+            self.sound_manager.play("eat")
 
-        draw_text(screen, f"Score: {self.score}",
-                  SMALL_FONT, WHITE, 20, 4, center=False)
-        draw_text(screen, f"High Score: {self.high_score}",
-                  SMALL_FONT, YELLOW, 160, 4, center=False)
-        draw_text(screen, f"Level: {self.level}",
-                  SMALL_FONT, CYAN, 390, 4, center=False)
-        draw_text(screen, f"Obstacles: {len(self.obstacle_manager.obstacles)}",
-                  SMALL_FONT, ORANGE, 510, 4, center=False)
-        draw_text(screen, "SPACE: Pause   ESC: Quit",
-                  SMALL_FONT, LIGHT_GRAY, 685, 4, center=False)
+            self.particles.burst(
+                *self.get_cell_center(self.food.position),
+                DIFFICULTIES[self.selected_difficulty]["color"],
+                amount=28
+            )
+
+            self.food.respawn(self.get_blocked_cells())
+
+        if self.power_up and head == self.power_up.position:
+            self.apply_power_up(self.power_up.kind)
+            self.power_up = None
+            self.next_power_spawn_time = current_time + \
+                random.randint(7_000, 12_000)
+
+    def draw_background(self):
+        """Draw premium background."""
+        draw_vertical_gradient(screen, DARK_NAVY, BLACK)
+
+        colors = [NEON_CYAN, NEON_PURPLE, NEON_GREEN, NEON_PINK, NEON_BLUE]
+
+        for index in range(5):
+            x = int((index * 220 + math.sin(self.menu_timer + index) * 40) %
+                    WINDOW_WIDTH)
+            y = int(110 + index * 115 + math.cos(self.menu_timer + index) * 24)
+
+            glow_surface = pygame.Surface((190, 190), pygame.SRCALPHA)
+            pygame.draw.circle(
+                glow_surface, (*colors[index], 22), (95, 95), 78)
+            screen.blit(glow_surface, (x - 95, y - 95))
+
+    def draw_audio_button(self):
+        """Draw mute/unmute button."""
+        text = "UNMUTE" if self.sound_manager.muted else "MUTE"
+        self.mute_button.text = text
+        self.mute_button.draw(screen)
 
     def draw_menu(self):
-        """Draw the main menu."""
-        draw_gradient_background(screen)
+        """Draw menu."""
+        self.draw_background()
 
-        draw_text(screen, "ADVANCED", TITLE_FONT, CYAN, WINDOW_WIDTH // 2, 130)
-        draw_text(screen, "SNAKE GAME", TITLE_FONT,
-                  GREEN, WINDOW_WIDTH // 2, 195)
+        title_y = 145 + math.sin(self.menu_timer * 1.6) * 8
+
+        draw_text(screen, "PREMIUM", TITLE_FONT,
+                  NEON_CYAN, WINDOW_WIDTH // 2, title_y)
+        draw_text(screen, "SNAKE", TITLE_FONT, NEON_GREEN,
+                  WINDOW_WIDTH // 2, title_y + 72)
 
         draw_text(
             screen,
-            "Now with obstacles, sounds, and saved high scores",
+            "Obstacles • Power-ups • Sound • Saved high score • Chaos, but make it aesthetic",
             SMALL_FONT,
-            LIGHT_GRAY,
+            MUTED,
             WINDOW_WIDTH // 2,
-            260
+            268
         )
 
-        create_button(screen, "PRESS ENTER TO START",
-                      WINDOW_WIDTH // 2 - 180, 330, 360, 65)
+        cards = [
+            ("Obstacles", ORANGE),
+            ("Power-ups", NEON_PINK),
+            ("Hard Levels", NEON_RED),
+        ]
 
-        draw_text(screen, "Controls", MEDIUM_FONT,
-                  WHITE, WINDOW_WIDTH // 2, 450)
-        draw_text(screen, "Arrow Keys / WASD  - Move",
-                  SMALL_FONT, GRAY, WINDOW_WIDTH // 2, 490)
-        draw_text(screen, "SPACE - Pause     ESC - Quit",
-                  SMALL_FONT, GRAY, WINDOW_WIDTH // 2, 520)
-        draw_text(screen, f"Saved High Score: {self.high_score}",
-                  SMALL_FONT, YELLOW, WINDOW_WIDTH // 2, 560)
+        card_width = 190
+        start_x = WINDOW_WIDTH // 2 - ((card_width * 3 + 24 * 2) // 2)
 
-        draw_text(screen, "Built with Python + Pygame",
-                  TINY_FONT, PURPLE, WINDOW_WIDTH // 2, 610)
+        for index, (text, color) in enumerate(cards):
+            rect = pygame.Rect(start_x + index *
+                               (card_width + 24), 298, card_width, 66)
+            draw_rounded_rect(screen, PANEL, rect, 18, color, 2)
+            draw_text(screen, text, SMALL_FONT, WHITE,
+                      rect.centerx, rect.centery)
 
-    def draw_paused_overlay(self):
-        """Draw pause overlay."""
-        overlay = pygame.Surface(
-            (WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 155))
-        screen.blit(overlay, (0, 0))
+        self.start_button.draw(screen)
 
-        panel = pygame.Rect(WINDOW_WIDTH // 2 - 230,
-                            WINDOW_HEIGHT // 2 - 105, 460, 210)
-        draw_rounded_rect(screen, PANEL_COLOR, panel, 22, PANEL_BORDER, 3)
+        draw_text(screen, "Select Difficulty", SMALL_FONT,
+                  MUTED, WINDOW_WIDTH // 2, 432)
 
-        draw_text(screen, "PAUSED", LARGE_FONT, YELLOW,
-                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 35)
-        draw_text(screen, "Press SPACE to continue", SMALL_FONT,
-                  WHITE, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 25)
+        self.easy_button.draw(screen, self.selected_difficulty == "Easy")
+        self.normal_button.draw(screen, self.selected_difficulty == "Normal")
+        self.hard_button.draw(screen, self.selected_difficulty == "Hard")
 
-    def draw_game_over(self):
-        """Draw game over screen."""
-        draw_gradient_background(screen)
+        selected_color = DIFFICULTIES[self.selected_difficulty]["color"]
 
-        panel = pygame.Rect(WINDOW_WIDTH // 2 - 280,
-                            WINDOW_HEIGHT // 2 - 190, 560, 380)
-        draw_rounded_rect(screen, PANEL_COLOR, panel, 24, RED, 3)
+        draw_text(
+            screen,
+            f"Selected: {self.selected_difficulty}",
+            MEDIUM_FONT,
+            selected_color,
+            WINDOW_WIDTH // 2,
+            535
+        )
 
-        draw_text(screen, "GAME OVER", TITLE_FONT, RED,
-                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 115)
+        volume_percent = int(self.sound_manager.volume * 100)
 
-        draw_text(screen, f"Final Score: {self.score}", MEDIUM_FONT,
-                  WHITE, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 40)
-        draw_text(screen, f"High Score: {self.high_score}", MEDIUM_FONT,
-                  YELLOW, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 5)
-        draw_text(screen, f"Level Reached: {self.level}", MEDIUM_FONT,
-                  CYAN, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50)
-        draw_text(screen, f"Obstacles Survived: {len(self.obstacle_manager.obstacles)}",
-                  MEDIUM_FONT, ORANGE, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 95)
+        audio_text = "Muted" if self.sound_manager.muted else f"Volume: {volume_percent}%"
 
-        draw_text(screen, "Press ENTER to restart", SMALL_FONT,
-                  LIGHT_GRAY, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 145)
-        draw_text(screen, "Press ESC to quit", SMALL_FONT, GRAY,
-                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 175)
+        draw_text(
+            screen,
+            f"High Score: {self.high_score}   •   Audio: {audio_text}",
+            SMALL_FONT,
+            YELLOW,
+            WINDOW_WIDTH // 2,
+            580
+        )
+
+        draw_text(
+            screen,
+            "ENTER Start • M Mute • + / - Volume • ESC Quit",
+            TINY_FONT,
+            SOFT_MUTED,
+            WINDOW_WIDTH // 2,
+            625
+        )
+
+        self.draw_audio_button()
+
+    def draw_top_bar(self):
+        """Draw HUD."""
+        top_rect = pygame.Rect(0, 0, WINDOW_WIDTH, TOP_BAR_HEIGHT)
+
+        pygame.draw.rect(screen, PANEL, top_rect)
+        pygame.draw.line(screen, PANEL_LIGHT, (0, TOP_BAR_HEIGHT),
+                         (WINDOW_WIDTH, TOP_BAR_HEIGHT), 2)
+
+        difficulty_color = DIFFICULTIES[self.selected_difficulty]["color"]
+
+        draw_text(screen, "SNAKE", MEDIUM_FONT,
+                  NEON_GREEN, 24, 18, center=False)
+        draw_text(screen, f"Score: {self.score}",
+                  SMALL_FONT, WHITE, 145, 22, center=False)
+        draw_text(screen, f"High: {self.high_score}",
+                  SMALL_FONT, YELLOW, 270, 22, center=False)
+        draw_text(screen, f"Level: {self.level}",
+                  SMALL_FONT, NEON_CYAN, 390, 22, center=False)
+        draw_text(screen, f"Mode: {self.selected_difficulty}",
+                  SMALL_FONT, difficulty_color, 500, 22, center=False)
+        draw_text(screen, f"Obstacles: {len(self.obstacle_manager.obstacles)}",
+                  SMALL_FONT, ORANGE, 640, 22, center=False)
+
+        self.draw_audio_button()
+
+    def draw_active_effects(self):
+        """Draw active power-up effects."""
+        current_time = pygame.time.get_ticks()
+        x = 18
+        y = WINDOW_HEIGHT - 42
+
+        for effect, end_time in self.active_effects.items():
+            if current_time < end_time:
+                config = POWER_UP_TYPES[effect]
+                seconds_left = max(0, (end_time - current_time) // 1000)
+
+                rect = pygame.Rect(x, y, 165, 30)
+                draw_rounded_rect(screen, PANEL, rect, 14, config["color"], 2)
+
+                draw_text(
+                    screen,
+                    f"{config['name']}: {seconds_left}s",
+                    TINY_FONT,
+                    WHITE,
+                    rect.centerx,
+                    rect.centery
+                )
+
+                x += 175
 
     def draw_game(self):
-        """Draw active gameplay."""
-        draw_gradient_background(screen)
-        draw_grid(screen)
+        """Draw gameplay."""
+        self.draw_background()
+        draw_grid(screen, offset=pygame.time.get_ticks() / 12)
 
         self.draw_top_bar()
         self.obstacle_manager.draw(screen)
         self.food.draw(screen)
-        self.snake.draw(screen)
+
+        if self.power_up:
+            self.power_up.draw(screen)
+
+        self.snake.draw(screen, shield_active=self.effect_active("shield"))
+        self.particles.draw(screen)
+        self.draw_active_effects()
+
+    def draw_pause_overlay(self):
+        """Draw pause screen."""
+        overlay = pygame.Surface(
+            (WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 165))
+        screen.blit(overlay, (0, 0))
+
+        panel = pygame.Rect(WINDOW_WIDTH // 2 - 280,
+                            WINDOW_HEIGHT // 2 - 145, 560, 290)
+        draw_rounded_rect(screen, PANEL, panel, 28, NEON_CYAN, 3)
+
+        draw_text(screen, "PAUSED", LARGE_FONT, YELLOW,
+                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 70)
+        draw_text(screen, "SPACE to continue", SMALL_FONT, WHITE,
+                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 15)
+        draw_text(screen, "M mute • + / - volume • ESC resume",
+                  SMALL_FONT, MUTED, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 25)
+
+    def draw_game_over(self):
+        """Draw game over screen."""
+        self.draw_background()
+
+        panel = pygame.Rect(WINDOW_WIDTH // 2 - 315,
+                            WINDOW_HEIGHT // 2 - 230, 630, 460)
+        draw_rounded_rect(screen, PANEL, panel, 30, NEON_RED, 3)
+
+        draw_text(screen, "GAME OVER", TITLE_FONT, NEON_RED,
+                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 155)
+
+        draw_text(screen, f"Final Score: {self.score}", MEDIUM_FONT,
+                  WHITE, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 70)
+        draw_text(screen, f"High Score: {self.high_score}", MEDIUM_FONT,
+                  YELLOW, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 30)
+        draw_text(screen, f"Level Reached: {self.level}", MEDIUM_FONT,
+                  NEON_CYAN, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 10)
+        draw_text(screen, f"Difficulty: {self.selected_difficulty}", MEDIUM_FONT,
+                  DIFFICULTIES[self.selected_difficulty]["color"], WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50)
+        draw_text(screen, f"Obstacles Survived: {len(self.obstacle_manager.obstacles)}",
+                  MEDIUM_FONT, ORANGE, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 90)
+
+        restart = pygame.Rect(WINDOW_WIDTH // 2 - 170,
+                              WINDOW_HEIGHT // 2 + 140, 340, 58)
+        draw_rounded_rect(screen, PANEL_LIGHT, restart, 18, NEON_GREEN, 2)
+
+        draw_text(screen, "ENTER / CLICK TO RESTART", SMALL_FONT,
+                  WHITE, restart.centerx, restart.centery)
+        draw_text(screen, "ESC to quit", TINY_FONT, MUTED,
+                  WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 210)
+
+    def draw_transition(self):
+        """Draw fade transition."""
+        if self.transition_alpha <= 0:
+            return
+
+        transition = pygame.Surface(
+            (WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        transition.fill((255, 255, 255, self.transition_alpha))
+        screen.blit(transition, (0, 0))
 
     def draw(self):
-        """Draw current screen based on state."""
+        """Draw current state."""
         if self.state == "menu":
             self.draw_menu()
 
@@ -712,11 +1407,12 @@ class SnakeGame:
 
         elif self.state == "paused":
             self.draw_game()
-            self.draw_paused_overlay()
+            self.draw_pause_overlay()
 
         elif self.state == "game_over":
             self.draw_game_over()
 
+        self.draw_transition()
         pygame.display.flip()
 
     def run(self):
@@ -729,13 +1425,14 @@ class SnakeGame:
             self.draw()
             clock.tick(FPS)
 
+        self.save_current_settings()
         pygame.quit()
 
 
 # ============================================================
-# Start Game
+# Run Game
 # ============================================================
 
 if __name__ == "__main__":
-    game = SnakeGame()
+    game = PremiumSnakeGame()
     game.run()
